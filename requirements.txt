@@ -4,3 +4,4 @@ mega.py
 flask
 hachoir
 ffmpeg
+Aptfile
