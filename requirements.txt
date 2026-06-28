@@ -2,3 +2,4 @@ pyrogram
 tgcrypto
 mega.py
 flask
+hachoir
