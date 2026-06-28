@@ -13,8 +13,7 @@ except RuntimeError:
 # ------------------------------------------------------------
 
 import os
-import shutil
-import re
+import random
 from threading import Thread
 from flask import Flask
 from pyrogram import Client, filters
@@ -34,38 +33,24 @@ def run_flask():
 API_ID = 33361737
 API_HASH = "7cd3bda26b08957a7205bbe8a51e6e90"
 BOT_TOKEN = "8861881763:AAHCVZ1V7pIYOJe4yRt3rwGU5qtt3BUBt0Q"
-ADMIN_ID = 8861881763  
 
 app = Client("mega_downloader_koyeb", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
-    await message.reply_text("👋 Bot ready hai! Mujhe Mega file/folder ka link bhejiye, main download kar dunga.")
+    await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main direct proper video file bhejunga.")
 
-@app.on_message(filters.regex(r"https://mega\.nz/"))
+@app.on_message(filters.regex(r"https://mega\.nz/(file|folder)/"))
 async def handle_mega_link(client, message):
-    # Pure message me se accurately link filter karna
-    match = re.search(r"(https://mega\.nz/[^\s]+)", message.text)
-    if not match:
-        await message.reply_text("❌ Sahi Mega link nahi mila!")
-        return
-        
-    url = match.group(1)
-    
-    # NEW FIX: Agar naya format link hai (/#folder/ ya /#file/), toh use mega.py ke compatible purane format me badlein
-    if "/folder/" in url and "#" in url:
-        url = url.replace("/folder/", "/#F!").replace("#", "!")
-    elif "/file/" in url and "#" in url:
-        url = url.replace("/file/", "/#!").replace("#", "!")
-
-    status_message = await message.reply_text("🔄 Mega link mil gaya! Server session check ho raha hai...")
+    url = message.text
+    status_message = await message.reply_text("🔄 Mega link mil gaya! Processing...")
 
     try:
-        user_download_dir = f"./downloads_{message.id}"
-        if not os.path.exists(user_download_dir):
-            os.makedirs(user_download_dir)
+        download_dir = "./downloads"
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
 
-        await status_message.edit_text("📥 Mega se downloading shuru ho gayi hai... (Thoda wait karein)")
+        await status_message.edit_text("📥 Koyeb server se video download ho rahi hai...")
         
         mega = Mega()
         m = mega.login() 
@@ -75,62 +60,34 @@ async def handle_mega_link(client, message):
         except RuntimeError:
             loop = asyncio.get_event_loop()
             
-        downloaded_paths = await loop.run_in_executor(None, lambda: m.download_url(url, dest_path=user_download_dir))
+        file_path = await loop.run_in_executor(None, lambda: m.download_url(url, dest_path=download_dir))
         
-        if not downloaded_paths:
-            raise Exception("Mega ne koi file download nahi ki. Link ya Server me dikkat hai.")
+        if isinstance(file_path, list):
+            file_path = file_path[0]
 
-        if not isinstance(downloaded_paths, list):
-            downloaded_paths = [downloaded_paths]
-
-        await status_message.edit_text(f"📤 Download complete! Total {len(downloaded_paths)} files mili hain. Uploading...")
-
-        file_count = 1
-        for file_path in downloaded_paths:
-            if os.path.isfile(file_path):
-                file_name = os.path.basename(file_path)
-                await status_message.edit_text(f"📤 Uploading file {file_count}/{len(downloaded_paths)}:\n`{file_name}`")
-                
-                await client.send_document(
-                    chat_id=message.chat.id, 
-                    document=file_path,
-                    caption=f"✅ Part {file_count}: {file_name}"
-                )
-                file_count += 1
-                os.remove(file_path)
-
+        await status_message.edit_text("📤 Download complete! Ab video file send ho rahi hai...")
+        
+        # FIX: send_document use kiya hai bina reply_to_message_id ke
+        await client.send_document(
+            chat_id=message.chat.id, 
+            document=file_path,
+            caption="✅ Aapki Video Proper File Formate Me Taiyar Hai!"
+        )
+        
         await status_message.delete()
         
-        if os.path.exists(user_download_dir):
-            shutil.rmtree(user_download_dir)
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
     except Exception as e:
-        error_msg = str(e)
-        if "Url key missing" in error_msg:
-            await status_message.edit_text(
-                "❌ **Error: Url key missing**\n\nMega library is link ke format ko parse nahi kar paayi. "
-                "Ek baar check karein ki link sahi aur working hai ya nahi."
-            )
-        else:
-            await status_message.edit_text(f"❌ Error: {error_msg}")
-            
-        if 'user_download_dir' in locals() and os.path.exists(user_download_dir):
-            shutil.rmtree(user_download_dir)
+        await status_message.edit_text(f"❌ Error: {str(e)}")
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
 
-async def start_bot():
+if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
     
     print("🚀 Starting Bot on Koyeb...")
-    await app.start()
-    
-    try:
-        await app.send_message(chat_id=ADMIN_ID, text="🔄 **Bot successfully restart ho gaya hai!**")
-    except Exception as e:
-        print(f"⚠️ Notification error: {str(e)}")
-        
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    app.run(start_bot())
+    app.run()
