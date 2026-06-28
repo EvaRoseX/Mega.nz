@@ -13,7 +13,7 @@ except RuntimeError:
 # ------------------------------------------------------------
 
 import os
-import random
+import time
 from threading import Thread
 from flask import Flask
 from pyrogram import Client, filters
@@ -36,6 +36,47 @@ BOT_TOKEN = "8861881763:AAHCVZ1V7pIYOJe4yRt3rwGU5qtt3BUBt0Q"
 
 app = Client("mega_downloader_koyeb", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
+# --- LIVE PROGRESS BAR FUNCTION ---
+async def progress_bar(current, total, status_message, start_time):
+    # Har 3 second mein sirf ek baar message update hoga taaki Telegram floodwait error na de
+    now = time.time()
+    if not hasattr(progress_bar, "last_update"):
+        progress_bar.last_update = 0
+        
+    if now - progress_bar.last_update < 3 and current != total:
+        return
+
+    progress_bar.last_update = now
+    
+    percentage = (current / total) * 100
+    completed_blocks = int(percentage // 10)
+    remaining_blocks = 10 - completed_blocks
+    
+    # Progress bar design: [████░░░░░░]
+    bar = "█" * completed_blocks + "░" * remaining_blocks
+    
+    # Speed and Time calculation
+    elapsed_time = now - start_time
+    if elapsed_time > 0:
+        speed = current / elapsed_time / (1024 * 1024) # MB/s
+    else:
+        speed = 0
+        
+    current_mb = current / (1024 * 1024)
+    total_mb = total / (1024 * 1024)
+
+    status_text = (
+        f"📤 **Uploading to Telegram...**\n\n"
+        f"🌀 **Progress:** `[{bar}] {percentage:.1f}%`\n"
+        f"📦 **Size:** `{current_mb:.2f} MB` / `{total_mb:.2f} MB`\n"
+        f"⚡ **Speed:** `{speed:.2f} MB/s`"
+    )
+    
+    try:
+        await status_message.edit_text(status_text)
+    except Exception:
+        pass
+
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
     await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main direct proper video file bhejunga.")
@@ -50,7 +91,7 @@ async def handle_mega_link(client, message):
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
 
-        await status_message.edit_text("📥 Koyeb server se video download ho rahi hai...")
+        await status_message.edit_text("📥 Koyeb server me Mega se file download ho rahi hai... Please wait.")
         
         mega = Mega()
         m = mega.login() 
@@ -60,29 +101,43 @@ async def handle_mega_link(client, message):
         except RuntimeError:
             loop = asyncio.get_event_loop()
             
+        # Mega link download setup
         file_path = await loop.run_in_executor(None, lambda: m.download_url(url, dest_path=download_dir))
         
+        # Safe List Checking
         if isinstance(file_path, list):
-            file_path = file_path[0]
+            if len(file_path) == 0:
+                await status_message.edit_text("❌ Error: Mega link se koi file download nahi ho payi.")
+                return
+            else:
+                file_path = file_path[0]
 
-        await status_message.edit_text("📤 Download complete! Ab video file send ho rahi hai...")
+        if not file_path or not os.path.exists(str(file_path)):
+            await status_message.edit_text("❌ Error: File server par nahi mili.")
+            return
+
+        # Upload start time
+        start_time = time.time()
+        await status_message.edit_text("📤 Uploading started... Status bar update ho raha hai...")
         
-        # FIX: send_document use kiya hai bina reply_to_message_id ke
+        # Telegram upload with LIVE status
         await client.send_document(
             chat_id=message.chat.id, 
-            document=file_path,
-            caption="✅ Aapki Video Proper File Formate Me Taiyar Hai!"
+            document=str(file_path),
+            caption="✅ **Aapki File Taiyar Hai!**",
+            progress=progress_bar,
+            progress_args=(status_message, start_time)
         )
         
         await status_message.delete()
         
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        if os.path.exists(str(file_path)):
+            os.remove(str(file_path))
 
     except Exception as e:
         await status_message.edit_text(f"❌ Error: {str(e)}")
-        if 'file_path' in locals() and os.path.exists(file_path):
-            os.remove(file_path)
+        if 'file_path' in locals() and file_path and os.path.exists(str(file_path)):
+            os.remove(str(file_path))
 
 if __name__ == "__main__":
     t = Thread(target=run_flask)
