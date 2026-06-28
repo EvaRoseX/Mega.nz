@@ -3,3 +3,4 @@ tgcrypto
 mega.py
 flask
 hachoir
+ffmpeg
