@@ -1,8 +1,19 @@
-# --- PYTHON 3.11+ ASYNCIO PATCH ---
+# --- PYTHON 3.11/3.13/3.14+ ALL-IN-ONE ERROR FIX (PATCH) ---
 import asyncio
+import sys
+
+# Patch 1: asyncio.coroutine fix
 if not hasattr(asyncio, "coroutine"):
     asyncio.coroutine = lambda f: f
-# ----------------------------------
+
+# Patch 2: Python 3.14+ get_event_loop fix
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    # Agar loop nahi hai toh naya banakar set karein
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ------------------------------------------------------------
 
 import os
 from threading import Thread
@@ -15,10 +26,9 @@ flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "Bot is Running 24/7!"
+    return "Bot is Running 24/7 on Render!"
 
 def run_flask():
-    # Render automatically $PORT environment variable deta hai
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host='0.0.0.0', port=port)
 
@@ -46,7 +56,13 @@ async def handle_mega_link(client, message):
 
         await status_message.edit_text("📥 Mega se download ho raha hai...")
         m = mega.login()
-        loop = asyncio.get_event_loop()
+        
+        # Python 3.14 safe event loop execution
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+            
         file_path = await loop.run_in_executor(None, lambda: m.download_url(url, dest_path=download_dir))
         
         if isinstance(file_path, list):
@@ -66,7 +82,6 @@ async def handle_mega_link(client, message):
 
 # --- 3. BOT AUR WEB SERVER KO SATH ME CHALANA ---
 if __name__ == "__main__":
-    # Flask ko alag thread me chalayenge taaki bot block na ho
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
