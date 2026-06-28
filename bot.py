@@ -20,7 +20,7 @@ from flask import Flask
 from pyrogram import Client, filters
 from mega import Mega
 
-# Hachoir parser tool video metadata extract karne ke liye
+# Hachoir parser tool for automatic thumbnail dimension calculations
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
@@ -83,12 +83,12 @@ async def progress_bar(current, total, status_message, start_time):
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
-    await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main fast speed (Tgcrypto) aur metadata ke sath upload karunga.")
+    await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main video download karke proper streaming player ke sath upload karunga.")
 
 @app.on_message(filters.regex(r"https://mega\.nz/"))
 async def handle_mega_link(client, message):
     url = message.text.strip()
-    status_message = await message.reply_text("🔄 Mega link mil gaya! Link check ho raha hai...")
+    status_message = await message.reply_text("🔄 Mega link mil gaya! Processing...")
 
     final_url = convert_mega_url(url)
     download_dir = "./downloads"
@@ -109,7 +109,7 @@ async def handle_mega_link(client, message):
         except RuntimeError:
             loop = asyncio.get_event_loop()
             
-        # 1. Download Thumbnail
+        # 1. Mega default thumbnail download trial
         try:
             thumb_path = await loop.run_in_executor(None, lambda: m.download_thumbnail(final_url, dest_path=download_dir))
             if isinstance(thumb_path, list) and len(thumb_path) > 0:
@@ -117,7 +117,7 @@ async def handle_mega_link(client, message):
         except Exception:
             thumb_path = None
 
-        # 2. Download File
+        # 2. Main File Download
         file_path = await loop.run_in_executor(None, lambda: m.download_url(final_url, dest_path=download_dir))
         if isinstance(file_path, list):
             file_path = file_path[0] if len(file_path) > 0 else None
@@ -130,10 +130,10 @@ async def handle_mega_link(client, message):
         start_time = time.time()
         file_name = str(file_path).lower()
         
-        # 3. HACHOIR METADATA EXTRACTION FOR VIDEO
+        # 3. Extract exact dimensions using Hachoir for accurate preview sizing
         duration = 0
-        width = 320
-        height = 180
+        width = 0
+        height = 0
         
         if file_name.endswith(('.mp4', '.mkv', '.webm', '.avi')):
             try:
@@ -146,18 +146,19 @@ async def handle_mega_link(client, message):
                     if metadata.has("height"):
                         height = metadata.get('height')
             except Exception:
-                pass # metadata na mile to default zero rahega, bot crash nahi hoga
+                pass
             
             await status_message.edit_text(f"📤 Video upload ho rahi hai... Size: {file_size:.2f} MB")
             
             video_thumb = str(thumb_path) if thumb_path and os.path.exists(str(thumb_path)) else None
             
+            # Sending with dynamic metadata mapped
             await client.send_video(
                 chat_id=message.chat.id, 
                 video=str(file_path),
-                duration=duration,     # Hachoir metadata injection
-                width=width,           # Hachoir metadata injection
-                height=height,         # Hachoir metadata injection
+                duration=duration,
+                width=width,
+                height=height,
                 thumb=video_thumb,     
                 caption=f"✅ **Aapki Video Taiyar Hai!**\n📦 **Size:** {file_size:.2f} MB",
                 supports_streaming=True,
@@ -183,7 +184,7 @@ async def handle_mega_link(client, message):
         await status_message.edit_text(f"❌ Error: {str(e)}")
     
     finally:
-        # Cleanup code for Koyeb disk management
+        # Strict storage optimization for Koyeb
         if file_path and os.path.exists(str(file_path)):
             try: os.remove(str(file_path))
             except Exception: pass
