@@ -33,7 +33,7 @@ def run_flask():
 # --- TELEGRAM BOT CREDENTIALS ---
 API_ID = 33361737
 API_HASH = "7cd3bda26b08957a7205bbe8a51e6e90"
-BOT_TOKEN = "8845441338:AAH_8gomla1JqmxCX4qaUeb1iT37udhwayU"
+BOT_TOKEN = "8861881763:AAHCVZ1V7pIYOJe4yRt3rwGU5qtt3BUBt0Q"
 
 app = Client("mega_downloader_render", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
