@@ -38,7 +38,6 @@ app = Client("mega_downloader_koyeb", api_id=API_ID, api_hash=API_HASH, bot_toke
 
 # --- LIVE PROGRESS BAR FUNCTION ---
 async def progress_bar(current, total, status_message, start_time):
-    # Har 3 second mein sirf ek baar message update hoga taaki Telegram floodwait error na de
     now = time.time()
     if not hasattr(progress_bar, "last_update"):
         progress_bar.last_update = 0
@@ -52,10 +51,8 @@ async def progress_bar(current, total, status_message, start_time):
     completed_blocks = int(percentage // 10)
     remaining_blocks = 10 - completed_blocks
     
-    # Progress bar design: [████░░░░░░]
     bar = "█" * completed_blocks + "░" * remaining_blocks
     
-    # Speed and Time calculation
     elapsed_time = now - start_time
     if elapsed_time > 0:
         speed = current / elapsed_time / (1024 * 1024) # MB/s
@@ -66,7 +63,7 @@ async def progress_bar(current, total, status_message, start_time):
     total_mb = total / (1024 * 1024)
 
     status_text = (
-        f"📤 **Uploading to Telegram...**\n\n"
+        f"📤 **Uploading Video...**\n\n"
         f"🌀 **Progress:** `[{bar}] {percentage:.1f}%`\n"
         f"📦 **Size:** `{current_mb:.2f} MB` / `{total_mb:.2f} MB`\n"
         f"⚡ **Speed:** `{speed:.2f} MB/s`"
@@ -79,7 +76,7 @@ async def progress_bar(current, total, status_message, start_time):
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
-    await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main direct proper video file bhejunga.")
+    await message.reply_text("👋 Bot ready hai! Mujhe Mega link bhejiye, main direct streaming video bhejunga.")
 
 @app.on_message(filters.regex(r"https://mega\.nz/(file|folder)/"))
 async def handle_mega_link(client, message):
@@ -91,7 +88,7 @@ async def handle_mega_link(client, message):
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
 
-        await status_message.edit_text("📥 Koyeb server me Mega se file download ho rahi hai... Please wait.")
+        await status_message.edit_text("📥 Koyeb server me Mega se video download ho rahi hai...")
         
         mega = Mega()
         m = mega.login() 
@@ -101,10 +98,8 @@ async def handle_mega_link(client, message):
         except RuntimeError:
             loop = asyncio.get_event_loop()
             
-        # Mega link download setup
         file_path = await loop.run_in_executor(None, lambda: m.download_url(url, dest_path=download_dir))
         
-        # Safe List Checking
         if isinstance(file_path, list):
             if len(file_path) == 0:
                 await status_message.edit_text("❌ Error: Mega link se koi file download nahi ho payi.")
@@ -116,15 +111,15 @@ async def handle_mega_link(client, message):
             await status_message.edit_text("❌ Error: File server par nahi mili.")
             return
 
-        # Upload start time
         start_time = time.time()
-        await status_message.edit_text("📤 Uploading started... Status bar update ho raha hai...")
+        await status_message.edit_text("📤 Uploading started... Video player generate ho raha hai...")
         
-        # Telegram upload with LIVE status
-        await client.send_document(
+        # --- FIX: send_video use kiya hai stream support ke saath ---
+        await client.send_video(
             chat_id=message.chat.id, 
-            document=str(file_path),
-            caption="✅ **Aapki File Taiyar Hai!**",
+            video=str(file_path),
+            caption="✅ **Aapki Video Taiyar Hai!**",
+            supports_streaming=True, # Isse video bina poori download huye play ho jayegi
             progress=progress_bar,
             progress_args=(status_message, start_time)
         )
